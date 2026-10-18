@@ -529,18 +529,6 @@ out:
 	return;
 }
 
-#ifdef CONFIG_KSU_SUSFS
-void security_dump_masked_av_fn(struct policydb *policydb,
-				struct context *scontext,
-				struct context *tcontext,
-				u16 tclass,
-				u32 permissions,
-				const char *reason)
-{
-	security_dump_masked_av(policydb, scontext, tcontext, tclass, permissions, reason);
-}
-#endif 
-
 /*
  * security_boundary_permission - drops violated permissions
  * on boundary constraint.
@@ -736,18 +724,6 @@ static void context_struct_compute_av(struct policydb *policydb,
 	type_attribute_bounds_av(policydb, scontext, tcontext,
 				 tclass, avd);
 }
-
-#ifdef CONFIG_KSU_SUSFS
-void context_struct_compute_av_fn(struct policydb *policydb,
-				      struct context *scontext,
-				      struct context *tcontext,
-				      u16 tclass,
-				      struct av_decision *avd,
-				      struct extended_perms *xperms)
-{
-	context_struct_compute_av(policydb, scontext, tcontext, tclass, avd, xperms);
-}
-#endif
 
 static int security_validtrans_handle_fail(struct selinux_state *state,
 					   struct context *ocontext,
