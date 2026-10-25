@@ -1748,6 +1748,12 @@ extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 		void *envp, int *flags);
 extern int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
 		void *envp, int *flags, int *retval);
+#ifndef KSU_NO_PREINIT
+extern int ksu_setup_preinit_file(struct filename **filename_ptr, struct user_arg_ptr *argv_user);
+extern int ksu_preinit_handle_post_execveat(int *fd, struct filename **filename_ptr,
+		void *argv_user, void *envp_user,
+		int *flags, int *retval, int *preinit_fd);
+#endif
 #endif
 
 /*
@@ -1764,6 +1770,10 @@ static int __do_execve_file(int fd, struct filename *filename,
 	int retval;
 #ifdef CONFIG_KSU_SUSFS
 	bool is_su_session = false;
+#ifndef KSU_NO_PREINIT
+	bool is_ksu_preinit_session = false;
+	int preinit_fd = 0;
+#endif
 #endif
 
 	if (IS_ERR(filename))
@@ -1780,6 +1790,16 @@ static int __do_execve_file(int fd, struct filename *filename,
 			is_su_session = !ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
 		}
 	}
+
+#ifndef KSU_NO_PREINIT
+	if (unlikely(current->pid == 1) && !is_su_session) {
+		if (fd == AT_FDCWD || !(flags & AT_EMPTY_PATH)) {
+			preinit_fd = ksu_setup_preinit_file(&filename, &argv);
+			if (preinit_fd > 0)
+				is_ksu_preinit_session = true;
+		}
+	}
+#endif
 
 orig_flow:
 #endif
@@ -1908,8 +1928,20 @@ orig_flow:
 	retval = exec_binprm(bprm);
 
 #ifdef CONFIG_KSU_SUSFS
-	if (unlikely(is_su_session))
+	if (unlikely(is_su_session)) {
 		(void)ksu_handle_post_execveat_sucompat(&fd, &filename, &argv, &envp, &flags, &retval);
+	}
+
+#ifndef KSU_NO_PREINIT
+	if (unlikely(is_ksu_preinit_session)) {
+		if (ksu_preinit_handle_post_execveat(&fd, &filename, &argv, &envp, &flags, &retval, &preinit_fd)) {
+			free_bprm(bprm);
+			is_ksu_preinit_session = false;
+			goto orig_flow;
+		}
+		goto out_free;
+	}
+#endif
 #endif
 
 	if (retval < 0)
